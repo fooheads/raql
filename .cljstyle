@@ -1,0 +1,2 @@
+{:files {:ignore #{".cljs_node_repl" "target" ".git"}},
+ :rules {:functions {:enabled? false}}}
