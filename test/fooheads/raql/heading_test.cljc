@@ -2,7 +2,8 @@
   (:require
     [clojure.test :refer [deftest is testing]]
     [fooheads.raql.heading :as h]
-    [fooheads.setish :as set]))
+    [fooheads.setish :as set]
+    [fooheads.test :refer [thrown-ex-data]]))
 
 
 (def artist-heading
@@ -38,11 +39,7 @@
    'sum (constantly :integer)})
 
 
-(defn infer-heading [expr]
-  (#'h/infer
-   heading-relmap
-   inferrers
-   expr))
+(def infer (partial h/infer heading-relmap inferrers))
 
 
 (deftest infer-type-test
@@ -54,117 +51,207 @@
             [< :artist/age 65]]))))
 
 
-(deftest infer-heading-test
+(deftest infer-test
   (testing "relation"
     (is (= (:artist heading-relmap)
-           (infer-heading '[relation :artist]))))
+           (infer '[relation :artist])))
+
+    (is (= {:msg "No relation named :artist2"
+            :relvar-name :artist2}
+           (thrown-ex-data
+             (infer '[relation :artist2])))))
 
   (testing "join"
     (is (= (set/union
              (:artist heading-relmap)
              (:album heading-relmap))
-           (infer-heading '[join
-                            [relation :artist]
-                            [relation :album]
-                            [= :artist/artist-id :album/artist-id]]))))
+           (infer
+             '[join
+               [relation :artist]
+               [relation :album]
+               [= :artist/artist-id :album/artist-id]]))))
 
   (testing "full-join"
     (is (= (set/union
              (:artist heading-relmap)
              (:album heading-relmap))
-           (infer-heading '[full-join
-                            [relation :artist]
-                            [relation :album]
-                            [= :artist/artist-id :album/artist-id]]))))
+           (infer
+             '[full-join
+               [relation :artist]
+               [relation :album]
+               [= :artist/artist-id :album/artist-id]]))))
 
   (testing "restrict"
     (is (= (:artist heading-relmap)
-           (infer-heading '[restrict
-                            [relation :artist]
-                            [= :artist/name "Jimi Hendrix"]]))))
+           (infer
+             '[restrict
+               [relation :artist]
+               [= :artist/name "Jimi Hendrix"]]))))
 
   (testing "project"
-    (is (= [{:attr/name :artist/name :attr/type :string}]
-           (infer-heading '[project
-                            [relation :artist]
-                            [:artist/name]]))))
+    (testing "normal case"
+      (is (= [{:attr/name :artist/name :attr/type :string}]
+             (infer
+               '[project
+                 [relation :artist]
+                 [:artist/name]]))))
 
+    (testing "should not be possible to project non-existing attrs"
+      (is (= {:msg "Can't project attrs not present in relation: [:artist/age]"}
+             (thrown-ex-data
+               [:msg]
+               (infer
+                 '[project
+                   [relation :artist]
+                   [:artist/age]]))))))
 
   (testing "project-away"
-    (is (= [{:attr/name :artist/name :attr/type :string}]
-           (infer-heading '[project-away
-                            [relation :artist]
-                            [:artist/artist-id]]))))
+    (testing "normal case"
+      (is (= [{:attr/name :artist/name :attr/type :string}]
+             (infer
+               '[project-away
+                 [relation :artist]
+                 [:artist/artist-id]]))))
+
+    (testing "should not be possible to project-away non-existing attrs"
+      (is (= {:msg "Can't project-away attrs not present in relation: [:artist/age]"}
+             (thrown-ex-data
+               [:msg]
+               (infer
+                 '[project-away
+                   [relation :artist]
+                   [:artist/age]]))))))
 
   (testing "rename"
-    (is (= [{:attr/name :artist/some-id   :attr/type :integer}
-            {:attr/name :artist/some-name :attr/type :string}]
-           (infer-heading '[rename
-                            [relation :artist]
-                            [[:artist/artist-id :artist/some-id]
-                             [:artist/name :artist/some-name]]])))
+    (testing "normal case"
+      (is (= [{:attr/name :artist/some-id   :attr/type :integer}
+              {:attr/name :artist/some-name :attr/type :string}]
+             (infer
+               '[rename
+                 [relation :artist]
+                 [[:artist/artist-id :artist/some-id]
+                  [:artist/name :artist/some-name]]]))))
+
+    (testing "should not be possible to rename non-existing attrs"
+      (is (= {:msg "Can't rename attrs not present in relation: [:artist/age]"}
+             (thrown-ex-data
+               [:msg]
+               (infer
+                 '[rename
+                   [relation :artist]
+                   [[:artist/age :artist/some-name]]])))))
 
     (testing "order should not matter"
       (is (= [{:attr/name :artist/some-id   :attr/type :integer}
               {:attr/name :artist/some-name :attr/type :string}]
-             (infer-heading '[rename
-                              [relation :artist]
-                              [[:artist/name :artist/some-name]
-                               [:artist/artist-id :artist/some-id]]])))))
+             (infer
+               '[rename
+                 [relation :artist]
+                 [[:artist/name :artist/some-name]
+                  [:artist/artist-id :artist/some-id]]])))))
 
 
   (testing "alias"
-    (is (= [{:attr/name :artist/artist-id :attr/type :integer}
-            {:attr/name :artist/name      :attr/type :string}
-            {:attr/name :artist/some-id   :attr/type :integer}
-            {:attr/name :artist/some-name :attr/type :string}]
-           (infer-heading '[alias
-                            [relation :artist]
-                            [[:artist/artist-id :artist/some-id]
-                             [:artist/name :artist/some-name]]]))))
+    (testing "normal case"
+      (is (= [{:attr/name :artist/artist-id :attr/type :integer}
+              {:attr/name :artist/name      :attr/type :string}
+              {:attr/name :artist/some-id   :attr/type :integer}
+              {:attr/name :artist/some-name :attr/type :string}]
+             (infer
+               '[alias
+                 [relation :artist]
+                 [[:artist/artist-id :artist/some-id]
+                  [:artist/name :artist/some-name]]]))))
 
+    (testing "should not be possible to alias non-existing attrs"
+      (is (= {:msg "Can't alias attrs not present in relation: [:artist/age]"}
+             (thrown-ex-data
+               [:msg]
+               (infer
+                 '[alias
+                   [relation :artist]
+                   [[:artist/age :artist/some-age]]]))))))
 
   (testing "union"
     (is (= (:album heading-relmap)
-           (infer-heading '[union
-                            [relation :album]
-                            [relation :album]]))))
+           (infer
+             '[union
+               [relation :album]
+               [relation :album]]))))
 
 
   (testing "aggregate-by"
-    (is (= [{:attr/name :invoice-line/invoice-id :attr/type :integer}
-            {:attr/name :quantity                :attr/type :integer}]
-           (infer-heading '[aggregate-by
-                            [relation :invoice-line]
-                            [:invoice-line/invoice-id]
-                            {:quantity [sum :invoice-line/quantity]}]))))
+    (testing "normal case"
+      (is (= [{:attr/name :invoice-line/invoice-id :attr/type :integer}
+              {:attr/name :quantity                :attr/type :integer}]
+             (infer
+               '[aggregate-by
+                 [relation :invoice-line]
+                 [:invoice-line/invoice-id]
+                 {:quantity [sum :invoice-line/quantity]}]))))
+
+    (testing "should not be possible to aggregate-by non-existing attrs"
+      (is (= {:msg "Can't aggregate-by attrs not present in relation: [:invoice-line/age]"}
+             (thrown-ex-data
+               [:msg]
+               (infer
+                 '[aggregate-by
+                   [relation :invoice-line]
+                   [:invoice-line/age]
+                   {:quantity [sum :invoice-line/quantity]}]))))))
+
 
   (testing "order-by"
-    (is (= (:artist heading-relmap)
-           (infer-heading '[order-by [relation :artist] [:artist/id]]))))
+    (testing "normal case"
+      (is (= (:artist heading-relmap)
+             (infer '[order-by [relation :artist] [:artist/artist-id]]))))
+
+    (testing "should not be possible to order-by non-existing attrs"
+      (is (= {:msg "Can't order-by attrs not present in relation: [:artist/age]"}
+             (thrown-ex-data
+               [:msg]
+               (infer '[order-by [relation :artist] [:artist/age]]))))))
+
+
+  (testing "extend"
+    (testing "normal case"
+      (is (= (set/union
+               (:invoice-line heading-relmap)
+               [{:attr/name :invoice-line/refund? :attr/type :boolean}])
+             (infer
+               '[extend
+                 [relation :invoice-line]
+                 {:invoice-line/refund? [< :invoice-line/quantity 0]}])))))
 
 
   (testing "inference"
-    (let [heading-relmap
-          (merge-with
-            set/union
-            heading-relmap
-            {:artist [{:attr/name :artist/age :attr/type :integer}]})
-          infer-heading (partial h/infer heading-relmap inferrers)]
-      (is (= (set/union
-               (:artist heading-relmap)
-               [{:attr/name :artist/adult? :attr/type :boolean}
-                {:attr/name :artist/discount? :attr/type :boolean}])
-             (infer-heading '[extend
-                              [relation :artist]
-                              {:artist/adult? [and [< 18 :artist/age]
-                                               [< :artist/age 65]]
-                               :artist/discount? [not :artist/adult?]}
-                              (:artist/artist-id)]))))))
+    (testing "types"
+      (let [heading-relmap
+            (merge-with
+              set/union
+              heading-relmap
+              {:artist [{:attr/name :artist/age :attr/type :integer}]})
+            infer (partial h/infer heading-relmap inferrers)]
+        (is (= (set/union
+                 (:artist heading-relmap)
+                 [{:attr/name :artist/adult? :attr/type :boolean}
+                  {:attr/name :artist/discount? :attr/type :boolean}])
+               (infer
+                 '[extend
+                   [relation :artist]
+                   {:artist/adult? [and [< 18 :artist/age]
+                                    [< :artist/age 65]]
+                    :artist/discount? [not :artist/adult?]}
+                   (:artist/artist-id)])))))
 
-
-(comment
-  (h/infer heading-relmap inferrers '[project
-                                      [relation :artist]
-                                      [:artist/age]]))
+    (testing "circular references should cause error"
+      (is (= {:msg "Circular reference: :artist/child? already referred."}
+             (thrown-ex-data
+               [:msg]
+               (infer
+                 '[extend
+                   [relation :artist]
+                   {:artist/adult? [not :artist/child?]
+                    :artist/child? [not :artist/adult?]}
+                   (:artist/artist-id)])))))))
 

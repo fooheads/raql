@@ -13,10 +13,7 @@
 (defn- -inline-references
   [m v breadcrumbs]
   (when (breadcrumbs v)
-    (throw (ex-info (str "Circular reference: " v " already referred.")
-                    {:breadcrumbs breadcrumbs
-                     :v v
-                     :m m})))
+    (throw-ex "Circular reference: {v} already referred." breadcrumbs v m))
 
   (cond
     (map? v)
@@ -78,32 +75,49 @@
       (boolean? expr) :boolean
 
       :else
-      (let [msg (str "Not an expression: " expr)]
-        (throw (ex-info msg {:heading heading :inferrers inferrers :expr expr}))))))
+      (throw-ex "Not an expression: {expr}" heading inferrers))))
 
 
-(defn join
+(defn- validate-attrs-exists! [operation-name xh attr-names]
+  (let [attr-names (vec attr-names)
+        xh-attr-names (map :attr/name xh)
+        missing-attrs (set/difference attr-names xh-attr-names)]
+    (when-not (empty? missing-attrs)
+      (throw-ex
+        "Can't {operation-name} attrs not present in relation: {missing-attrs}"
+        xh attr-names operation-name))))
+
+
+(defn- relation [heading-relmap relvar-name]
+  (if-let [xh (get heading-relmap relvar-name)]
+    xh
+    (throw-ex "No relation named {relvar-name}")))
+
+
+(defn- join
   ([xh yh]
    (join xh yh nil))
   ([xh yh _]
    (set/union xh yh)))
 
 
-(defn full-join
+(defn- full-join
   ([xh yh]
    (full-join xh yh nil))
   ([xh yh _]
    (set/union xh yh)))
 
 
-(defn rename
+(defn- rename
   [xh renames]
   (let [rename-map (into {} renames)]
+    (validate-attrs-exists! "rename" xh (keys rename-map))
     (set/update xh :attr/name (fn [v] (get rename-map v v)))))
 
 
-(defn alias
+(defn- alias
   [xh aliases]
+  (validate-attrs-exists! "alias" xh (map first aliases))
   (let [index (set/index-unique xh [:attr/name])
         aliash (mapv
                  (fn [[from to]]
@@ -113,8 +127,9 @@
     (set/union xh aliash)))
 
 
-(defn project
+(defn- project
   [xh header-names]
+  (validate-attrs-exists! "project" xh header-names)
   (let [header-names (set header-names)]
     (set/select
       (fn [t]
@@ -122,8 +137,9 @@
       xh)))
 
 
-(defn project-away
+(defn- project-away
   [xh header-names]
+  (validate-attrs-exists! "project-away" xh header-names)
   (let [header-names (set header-names)]
     (set/select
       (fn [t]
@@ -131,7 +147,7 @@
       xh)))
 
 
-(defn extend [xh extension-type-map]
+(defn- extend [xh extension-type-map]
   (set/union
     xh
     (->>
@@ -140,11 +156,12 @@
       (set))))
 
 
-(defn union [xh _yh]
+(defn- union [xh _yh]
   xh)
 
 
-(defn aggregate-by [inferrers xh attrs aggregation-map]
+(defn- aggregate-by [inferrers xh attrs aggregation-map]
+  (validate-attrs-exists! "aggregate-by" xh attrs)
   (let [projected-attrs (set attrs)]
     (set/union
       (set/select (fn [t] (projected-attrs (:attr/name t))) xh)
@@ -154,6 +171,11 @@
         (set)))))
 
 
+(defn- order-by [xh attrs]
+  (validate-attrs-exists! "order-by" xh attrs)
+  xh)
+
+
 (defn- -infer-heading
   [heading-relmap heading inferrers expr]
   (let [infer-heading (partial -infer-heading heading-relmap heading inferrers)
@@ -161,7 +183,7 @@
         [operator & args] expr]
     (case operator
       relation
-      (get heading-relmap (first args))
+      (relation heading-relmap (first args))
 
       restrict
       (let [[expr restriction] args
@@ -215,8 +237,9 @@
         (aggregate-by inferrers heading attrs aggregation-map))
 
       order-by
-      (let [[expr _attrs] args]
-        (infer-heading expr))
+      (let [[expr attrs] args
+            heading (infer-heading expr)]
+        (order-by heading attrs))
 
       (infer-type expr))))
 
