@@ -92,17 +92,17 @@
       ;; start rules
       ::canonical
       [:or
-       [:ref ::restrict]
        [:ref ::relation]
-       [:ref ::union]
-       [:ref ::join]
-       [:ref ::project-away]
-       [:ref ::full-join]
-       [:ref ::limit]
-       [:ref ::extend]
-       [:ref ::offset]
-       [:ref ::rename]
+       [:ref ::restrict]
        [:ref ::project]
+       [:ref ::project-away]
+       [:ref ::rename]
+       [:ref ::join]
+       [:ref ::full-join]
+       [:ref ::union]
+       [:ref ::extend]
+       [:ref ::limit]
+       [:ref ::offset]
        [:ref ::order-by]]}
 
     ;; apply all [form ...] elements
@@ -111,8 +111,10 @@
 
 (defn schema
   "Create a schema for the specified start rule"
-  [rule-name]
-  (m/schema [:schema {:registry schemas} rule-name]))
+  ([]
+   (m/schema [:schema {:registry schemas} ::canonical]))
+  ([rule-name]
+   (m/schema [:schema {:registry schemas} rule-name])))
 
 
 (defn valid?

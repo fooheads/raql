@@ -163,6 +163,14 @@
     (are [expected value] (= expected (valid? schema value))
       true '[restrict
              [relation :artist]
-             [or [= :artist/id 1] [= :artist/name "Jimi"]]])))
+             [or [= :artist/id 1] [= :artist/name "Jimi"]]]))
 
+  ;; Not yet implemented
+  #_(let [schema ::schema/canonical]
+      (are [expected value] (= expected (valid? schema value))
+        true '[project
+               [restrict
+                [relation :artist]
+                [or [= :artist/id 1] [= :artist/name "Jimi"]]]
+               [:artist/name]])))
 

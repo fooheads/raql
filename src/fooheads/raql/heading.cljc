@@ -1,65 +1,17 @@
 (ns fooheads.raql.heading
-  (:refer-clojure :exclude [alias extend])
+  (:refer-clojure :exclude [alias distinct extend])
   (:require
+    [clojure.walk :as walk]
+    [fooheads.raql.ast :as ast]
     [fooheads.setish :as set]
-    [fooheads.stdlib :as stdlib :refer [map-vals throw-ex]]))
-
-
-(defn- into* [to from]
-  (let [from (if (list? to) (reverse from) from)]
-    (into to from)))
-
-
-(defn- -inline-references
-  [m v breadcrumbs]
-  (when (breadcrumbs v)
-    (throw-ex "Circular reference: {v} already referred." breadcrumbs v m))
-
-  (cond
-    (map? v)
-    (reduce-kv
-      (fn [m' k v]
-        (assoc m' (-inline-references m k breadcrumbs)
-               (-inline-references m v breadcrumbs)))
-      {}
-      v)
-
-    (coll? v)
-    (into* (empty v)
-           (mapv #(-inline-references m % breadcrumbs) v))
-
-    :else
-    (if-let [v' (get m v)]
-      (-inline-references m v' (conj breadcrumbs v))
-      v)))
-
-
-(defn- inline-references
-  "Takes a map m that contains a key and some sort of expression
-  as values and recursively inlines anything in the expressions
-  that references the keys."
-  [m]
-  (zipmap
-    (keys m)
-    (-inline-references m (vals m) #{})))
+    [fooheads.stdlib :as stdlib :refer [apply-if throw-ex]]))
 
 
 (defn- -infer-type [heading inferrers expr]
   (let [infer-type (partial -infer-type heading inferrers)]
-    (cond
-      (string? expr)
-      :string
-
-      (keyword? expr)
-      (if-let [typ (->> heading
-                        (filter #(= expr (:attr/name %)))
-                        (first)
-                        (:attr/type))]
-        typ
-        (throw-ex "Unable to infer type for {expr}" heading))
-
-      (vector? expr)
-      (let [[operator & args] expr
+    (if (:operator expr)
+      (let [operator (:operator expr)
+            args (:args expr)
             types (mapv infer-type args)
             infer (get inferrers operator)]
         (if infer
@@ -67,15 +19,8 @@
             (if (map? inferred)
               (throw (ex-info (:error inferred) (merge {:expr expr} inferred)))
               inferred))
-          (throw-ex "Can't resolve symbol '{operator}'")))
-
-      (double? expr)  :double
-      (integer? expr) :integer
-      (string? expr)  :string
-      (boolean? expr) :boolean
-
-      :else
-      (throw-ex "Not an expression: {expr}" heading inferrers))))
+          (throw-ex "infer: Can't resolve symbol '{operator}'")))
+      :string)))
 
 
 (defn- validate-attrs-exists! [operation-name xh attr-names]
@@ -89,21 +34,14 @@
 
 
 (defn- relation [heading-relmap relvar-name]
-  (if-let [xh (get heading-relmap relvar-name)]
-    xh
+  (if-not (empty? (set/restrict (:relvar heading-relmap) #(= (:relvar/name %) relvar-name)))
+    (->> heading-relmap :attr (filterv #(= relvar-name (:attr/relvar-name %))))
     (throw-ex "No relation named {relvar-name}")))
 
 
 (defn- join
   ([xh yh]
    (join xh yh nil))
-  ([xh yh _]
-   (set/union xh yh)))
-
-
-(defn- full-join
-  ([xh yh]
-   (full-join xh yh nil))
   ([xh yh _]
    (set/union xh yh)))
 
@@ -115,16 +53,9 @@
     (set/update xh :attr/name (fn [v] (get rename-map v v)))))
 
 
-(defn- alias
-  [xh aliases]
-  (validate-attrs-exists! "alias" xh (map first aliases))
-  (let [index (set/index-unique xh [:attr/name])
-        aliash (mapv
-                 (fn [[from to]]
-                   (let [attr (index {:attr/name from})]
-                     (assoc attr :attr/name to)))
-                 aliases)]
-    (set/union xh aliash)))
+(defn- distinct
+  [xh]
+  xh)
 
 
 (defn- project
@@ -147,32 +78,17 @@
       xh)))
 
 
-(defn- extend [xh extension-type-map]
-  (set/union
-    xh
-    (->>
-      extension-type-map
-      (map (fn [[k v]] {:attr/name k :attr/type v}))
-      (set))))
-
-
 (defn- union [xh _yh]
   xh)
 
 
-(defn- aggregate-by [inferrers xh attrs aggregation-map]
-  (validate-attrs-exists! "aggregate-by" xh attrs)
-  (let [projected-attrs (set attrs)]
-    (set/union
-      (set/select (fn [t] (projected-attrs (:attr/name t))) xh)
-      (->>
-        aggregation-map
-        (map (fn [[k v]] {:attr/name k :attr/type (-infer-type xh inferrers v)}))
-        (set)))))
+(defn- order-by [xh ordering]
+  (let [attrs (map (fn [x] (if (vector? x) (first x) x)) ordering)]
+    (validate-attrs-exists! "order-by" xh attrs)
+    xh))
 
 
-(defn- order-by [xh attrs]
-  (validate-attrs-exists! "order-by" xh attrs)
+(defn- limit [xh _n _offset]
   xh)
 
 
@@ -180,7 +96,8 @@
   [heading-relmap heading inferrers expr]
   (let [infer-heading (partial -infer-heading heading-relmap heading inferrers)
         infer-type (partial -infer-type heading inferrers)
-        [operator & args] expr]
+        operator (:operator expr)
+        args (:args expr)]
     (case operator
       relation
       (relation heading-relmap (first args))
@@ -191,12 +108,6 @@
             _ (-infer-heading heading-relmap heading inferrers restriction)]
         heading)
 
-      join
-      (apply join (map infer-heading (take 2 args)))
-
-      full-join
-      (apply full-join (map infer-heading (take 2 args)))
-
       project
       (let [[expr header-names] args]
         (project (infer-heading expr) header-names))
@@ -205,24 +116,27 @@
       (let [[expr header-names] args]
         (project-away (infer-heading expr) header-names))
 
-      extend
-      (let [[expr extensions] args
-            heading (infer-heading expr)
-            infer-heading (partial -infer-heading heading-relmap
-                                   heading inferrers)
-            extensions (inline-references extensions)
-            extension-type-map (map-vals infer-heading extensions)]
-        (extend heading extension-type-map))
-
       rename
       (let [[expr renames] args
             heading (infer-heading expr)]
         (rename heading renames))
 
-      alias
-      (let [[expr aliases] args
+      distinct
+      (let [[expr] args
             heading (infer-heading expr)]
-        (alias heading aliases))
+        (distinct heading))
+
+      join
+      (apply join (map infer-heading (take 2 args)))
+
+      full-join
+      (apply join (map infer-heading (take 2 args)))
+
+      left-join
+      (apply join (map infer-heading (take 2 args)))
+
+      right-join
+      (apply join (map infer-heading (take 2 args)))
 
       union
       (let [[expr-x expr-y] args
@@ -231,10 +145,10 @@
         (assert (= heading-x heading-y) "union: headings must be the same")
         heading-x)
 
-      aggregate-by
-      (let [[expr attrs aggregation-map] args
+      limit
+      (let [[expr n offset] args
             heading (infer-heading expr)]
-        (aggregate-by inferrers heading attrs aggregation-map))
+        (limit heading n offset))
 
       order-by
       (let [[expr attrs] args
@@ -250,4 +164,13 @@
    (infer heading-relmap {} expr))
   ([heading-relmap inferrers expr]
    (-infer-heading heading-relmap #{} inferrers expr)))
+
+
+(defn decorate
+  "Decorates a raql expression tree with the heading at each level
+  as metadata"
+  [heading-relmap inferrers expr]
+  (walk/postwalk
+    (apply-if ast/node? (fn [m] (assoc m :heading (infer heading-relmap inferrers m))))
+    expr))
 
