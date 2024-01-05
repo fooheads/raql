@@ -12,14 +12,16 @@
 
 (defn compile
   "Compiles a raql expression into an AST"
-  [heading-relmap inferrers expr]
-  (let [expr (expand expr)]
-    #_(when-let [explanation (schema/explain (schema/schema) expr)]
-        (throw (ex-info (str explanation) {:explanation explanation
-                                           :expr expr})))
+  ([heading-relmap expr]
+   (compile heading-relmap {} expr))
+  ([heading-relmap inferrers expr]
+   (let [expr (expand expr)]
+     #_(when-let [explanation (schema/explain (schema/schema) expr)]
+         (throw (ex-info (str explanation) {:explanation explanation
+                                            :expr expr})))
 
-    (->>
-      expr
-      (ast/raql->ast)
-      (heading/decorate heading-relmap inferrers))))
+     (->>
+       expr
+       (ast/raql->ast)
+       (heading/decorate heading-relmap inferrers)))))
 
