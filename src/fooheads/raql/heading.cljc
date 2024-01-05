@@ -1,6 +1,7 @@
 (ns fooheads.raql.heading
   (:refer-clojure :exclude [alias distinct extend])
   (:require
+    [clj-fuzzy.metrics :as fuzzy]
     [clojure.walk :as walk]
     [fooheads.raql.ast :as ast]
     [fooheads.setish :as set]
@@ -23,20 +24,52 @@
       :string)))
 
 
+(defn- did-you-mean [names namn]
+  (let [coefficients
+        (map #(fuzzy/dice % (str namn)) (map str names))
+
+        suggestion
+        (second (last (sort (map vector coefficients names))))]
+
+    suggestion))
+
+
 (defn- validate-attrs-exists! [operation-name xh attr-names]
   (let [attr-names (vec attr-names)
-        xh-attr-names (map :attr/name xh)
-        missing-attrs (set/difference attr-names xh-attr-names)]
-    (when-not (empty? missing-attrs)
+        xh-attr-names (mapv :attr/name xh)
+        missing-attr (first (set/difference attr-names xh-attr-names))]
+    (when missing-attr
       (throw-ex
-        "Can't {operation-name} attrs not present in relation: {missing-attrs}"
+        "Can't {operation-name} {missing-attr}, not present in relation {xh-attr-names}"
         xh attr-names operation-name))))
 
 
+(defn- attrs-for-relvar [heading-relmap relvar]
+  (->
+    (:attr heading-relmap)
+    (set/join [relvar] {:attr/relvar-name :relvar/name})
+    (set/project [:attr/name :attr/type :attr/relvar-name])))
+
+
+(defn- get-relvar [heading-relmap relvar-name]
+  (let [relvar-rel
+        (->
+          (:relvar heading-relmap)
+          (set/restrict #(= (:relvar/name %) relvar-name)))]
+    (when (= 1 (count relvar-rel))
+      (first relvar-rel))))
+
+
+(defn- relvar-not-found [heading-relmap relvar-name]
+  (let [relvar-names (->> heading-relmap :relvar (map :relvar/name))
+        suggestion (did-you-mean relvar-names relvar-name)]
+    (throw-ex "No relvar named {relvar-name}. Did you mean {suggestion}?" suggestion)))
+
+
 (defn- relation [heading-relmap relvar-name]
-  (if-not (empty? (set/restrict (:relvar heading-relmap) #(= (:relvar/name %) relvar-name)))
-    (->> heading-relmap :attr (filterv #(= relvar-name (:attr/relvar-name %))))
-    (throw-ex "No relation named {relvar-name}")))
+  (if-let [relvar (get-relvar heading-relmap relvar-name)]
+    (attrs-for-relvar heading-relmap relvar)
+    (relvar-not-found heading-relmap relvar-name)))
 
 
 (defn- join

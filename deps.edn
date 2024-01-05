@@ -1,6 +1,7 @@
 {:paths ["src"]
  :deps
- {com.fooheads/setish              {:mvn/version "0.9.3"}
+ {clj-fuzzy/clj-fuzzy              {:mvn/version "0.4.1"}
+  com.fooheads/setish              {:mvn/version "0.9.3"}
   com.fooheads/stdlib              {:mvn/version "0.4.0"}
   com.fooheads/tolk                {:mvn/version "0.9.0"}
   com.github.igrishaev/zippo       {:mvn/version "0.1.3"}
