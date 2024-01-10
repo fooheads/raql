@@ -43,10 +43,14 @@
       ::boolean-binary-operator
       [form ::boolean-binary-operator-sym [:ref ::restriction] [:ref ::restriction]]
 
+      ::in-operator
+      [form in ::operand [:or [:vector :any] [:ref ::relation]]]
+
       ::restriction
       [:or
        [:ref ::binary-operator]
-       [:ref ::boolean-binary-operator]]
+       [:ref ::boolean-binary-operator]
+       [:ref ::in-operator]]
 
       ::expr
       [:and

@@ -66,10 +66,16 @@
       true '[or [= 1 2] [= 2 9]]))
 
 
+  (let [schema ::schema/in-operator]
+    (are [expected value] (= expected (valid? schema value))
+      true '[in :artist/artist-id [1 2 3]]))
+
+
   (let [schema ::schema/restriction]
     (are [expected value] (= expected (valid? schema value))
       true '[and [= 1 2] [= 2 9]]
-      true '[or [= 1 2] [= 2 9]]))
+      true '[or [= 1 2] [= 2 9]]
+      true '[in :artist/artist-id [1 2 3]]))
 
 
   (let [schema ::schema/expr]

@@ -88,7 +88,13 @@
            (infer
              '[restrict
                [relation :artist]
-               [= :artist/name "Jimi Hendrix"]]))))
+               [= :artist/name "Jimi Hendrix"]])))
+
+    (is (= (heading :artist)
+           (infer
+             '[restrict
+               [relation :artist]
+               [in :artist/artist-id [1 2 3]]]))))
 
   (testing "project"
     (testing "normal case"
