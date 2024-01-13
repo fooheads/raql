@@ -25,3 +25,9 @@
        (ast/raql->ast)
        (heading/decorate heading-relmap inferrers)))))
 
+
+(defn decompile
+  "Decompiles an AST into a raql expression"
+  [ast]
+  (ast/ast->raql ast))
+

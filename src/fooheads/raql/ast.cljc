@@ -1,5 +1,7 @@
 (ns fooheads.raql.ast
   (:require
+    [clojure.walk :refer [postwalk]]
+    [fooheads.stdlib :refer [const apply-if]]
     [fooheads.tolk :as tolk]))
 
 
@@ -38,4 +40,12 @@
 
 (defn node? [x]
   (and (map? x) (contains? x :operator) (contains? x :args)))
+
+
+(defn ast->raql [ast]
+  (postwalk
+    (apply-if
+      node?
+      (fn [node] (const (:operator node) (:args node))))
+    ast))
 

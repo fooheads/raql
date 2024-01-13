@@ -126,3 +126,22 @@
                 [= :artist/some-name "Jimi Hendrix"]]
                [:artist/some-name]])))))
 
+
+(deftest decompile-test
+  (let [raql
+        '[project
+          [restrict
+           [rename
+            [join
+             [relation :artist]
+             [relation :album]
+             [= :artist/id :album/artist-id]]
+            [[:artist/name :artist/some-name]]]
+           [= :artist/some-name "Jimi Hendrix"]]
+          [:artist/some-name]]]
+    (is (= raql
+           (->>
+             raql
+             (raql/compile heading-test/heading-relmap)
+             (raql/decompile))))))
+
