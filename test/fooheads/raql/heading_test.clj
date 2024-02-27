@@ -160,11 +160,17 @@
 
 
   (testing "union"
-    (is (= (heading :album)
+    (is (= (mapv #(dissoc % :attr/relvar-name) (heading :album))
            (infer
              '[union
                [relation :album]
-               [relation :album]]))))
+               [relation :album]])))
+
+    (is (= [{:attr/name :some/string :attr/type :string}]
+           (infer
+             '[union
+               [project [rename [relation :album] {:album/title :some/string}] [:some/string]]
+               [project [rename [relation :track] {:track/name :some/string}] [:some/string]]]))))
 
 
   (testing "order-by"

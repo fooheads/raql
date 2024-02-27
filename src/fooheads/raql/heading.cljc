@@ -173,8 +173,10 @@
 
       union
       (let [[expr-x expr-y] args
-            heading-x (infer-heading expr-x)
-            heading-y (infer-heading expr-y)]
+            ks [:attr/name :attr/type]
+            to-attr #(select-keys % ks)
+            heading-x (mapv to-attr (infer-heading expr-x))
+            heading-y (mapv to-attr (infer-heading expr-y))]
         (assert (= heading-x heading-y) "union: headings must be the same")
         heading-x)
 
