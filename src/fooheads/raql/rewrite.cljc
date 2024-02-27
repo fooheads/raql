@@ -21,7 +21,10 @@
     (apply-if
       relation-expression?
       (fn [expr]
-        (let [relvar-name (second expr)]
-          (get view-map relvar-name expr))))
+        (let [relvar-name (second expr)
+              view (get view-map relvar-name expr)]
+          (if (= view expr)
+            expr
+            (apply-views view-map view)))))
     raql))
 

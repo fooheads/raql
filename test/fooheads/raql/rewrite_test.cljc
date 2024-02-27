@@ -4,10 +4,15 @@
     [fooheads.raql.rewrite :as rewrite]))
 
 
-(def album-with-long-tracks
+(def long-track
   '[->
     [relation :Track]
-    [restrict [> :Track/Milliseconds 5000000]]
+    [restrict [> :Track/Milliseconds 5000000]]])
+
+
+(def album-with-long-tracks
+  '[->
+    [relation :long-track]
     [join
      [relation :Album]
      [= :Track/AlbumId :Album/AlbumId]]
@@ -19,8 +24,7 @@
            [relation :artist]
            [join
             [->
-             [relation :Track]
-             [restrict [> :Track/Milliseconds 5000000]]
+             [-> [relation :Track] [restrict [> :Track/Milliseconds 5000000]]]
              [join [relation :Album] [= :Track/AlbumId :Album/AlbumId]]
              [project [:Album/AlbumId :Album/Title]]]
             [= :artist/id :album/artist-id]]
@@ -28,7 +32,8 @@
 
 
          (rewrite/apply-views
-           {:album-with-long-tracks album-with-long-tracks}
+           {:album-with-long-tracks album-with-long-tracks
+            :long-track long-track}
            '[->
              [relation :artist]
              [join
