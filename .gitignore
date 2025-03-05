@@ -1,6 +1,9 @@
+.clj-kondo/.cache/
+.clj-kondo/imports/
 .cljs_node_repl/
 .cpcache
 .hide-port
+.lsp
 cljs-test-runner-out/
 node_modules/
 out/
