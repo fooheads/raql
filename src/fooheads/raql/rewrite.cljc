@@ -12,19 +12,21 @@
 (defn apply-views
   "Rewrites a raql expression by replacing relation expressions
   like `[relation :album-with-long-tracks]` with a a raql expression
-  in the `view-map`.
+  provided by the `relname->expr` arg.
 
-  The view map can look like this:
-  `{:album-with-long-tracks some-raql-expression}`"
-  [view-map raql]
+  `relname->expr` can be a map or a function. If a relname shouldn't be
+  rewritten, `nil` must be returned.
+
+  E.g. `{:album-with-long-tracks some-raql-expression}`."
+  [relname->expr raql]
   (postwalk
     (apply-if
       relation-expression?
       (fn [expr]
         (let [relvar-name (second expr)
-              view (get view-map relvar-name expr)]
+              view (or (relname->expr relvar-name) expr)]
           (if (= view expr)
             expr
-            (apply-views view-map view)))))
+            (apply-views relname->expr view)))))
     raql))
 
