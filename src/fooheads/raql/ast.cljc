@@ -18,7 +18,8 @@
     'right-join
     'union
     'limit
-    'order-by})
+    'order-by
+    'extend})
 
 
 (defn operator? [x]

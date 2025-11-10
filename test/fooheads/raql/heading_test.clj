@@ -185,5 +185,15 @@
       (is (= {:msg "Can't order-by :artist/age, not present in relation [:artist/artist-id :artist/name]"}
              (thrown-ex-data
                [:msg]
-               (infer '[order-by [relation :artist] [:artist/age]])))))))
+               (infer '[order-by [relation :artist] [:artist/age]]))))))
+
+
+  (testing "extend"
+    (is (= (into
+             (heading :artist)
+             [{:attr/name :artist/rating :attr/type :string :attr/relvar-name :artist}])
+           (infer
+             '[extend
+               [relation :artist]
+               {:artist/rating [:string "Awesome"]}])))))
 

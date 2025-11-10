@@ -125,6 +125,16 @@
   xh)
 
 
+(defn- extend [xh extensions]
+  (reduce
+    (fn [acc [k [type _v]]]
+      (conj acc #:attr{:name k
+                       :relvar-name (keyword (namespace k))
+                       :type type}))
+    xh
+    extensions))
+
+
 (defn- -infer-heading
   [heading-relmap heading inferrers expr]
   (let [infer-heading (partial -infer-heading heading-relmap heading inferrers)
@@ -189,6 +199,10 @@
       (let [[expr attrs] args
             heading (infer-heading expr)]
         (order-by heading attrs))
+
+      extend
+      (let [[expr extensions] args]
+        (extend (infer-heading expr) extensions))
 
       (infer-type expr))))
 
