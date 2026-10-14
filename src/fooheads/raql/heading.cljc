@@ -195,6 +195,9 @@
             heading (infer-heading expr)]
         (limit heading n offset))
 
+      offset
+      (infer-heading (first args))
+
       order-by
       (let [[expr attrs] args
             heading (infer-heading expr)]
@@ -222,4 +225,3 @@
   (walk/postwalk
     (apply-if ast/node? (fn [m] (assoc m :heading (infer heading-relmap inferrers m))))
     expr))
-

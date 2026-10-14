@@ -3,6 +3,7 @@
   validate and explain errors."
   (:require
     [clojure.walk :refer [postwalk]]
+    [fooheads.raql.pagination :as pagination]
     [fooheads.stdlib :refer [apply-if]]
     [malli.core :as m]
     [malli.error :as me]))
@@ -27,87 +28,106 @@
 
 (def schemas
   (->>
-    '{::ident    :symbol
-      ::constant [:or :int :double :string :boolean :string]
-      ::operand  [:or ::constant :keyword]
+    (assoc
+      '{::ident    :symbol
+        ::constant [:or :int :double :string :boolean :string]
+        ::operand  [:or ::constant :keyword]
 
-      ::binary-operator-sym
-      [:enum = <> < <= >= >]
+        ::binary-operator-sym
+        [:enum = <> < <= >= >]
 
-      ::binary-operator
-      [form ::binary-operator-sym ::operand ::operand]
+        ::binary-operator
+        [form ::binary-operator-sym ::operand ::operand]
 
-      ::boolean-binary-operator-sym
-      [:enum and or]
+        ::boolean-binary-operator-sym
+        [:enum and or]
 
-      ::boolean-binary-operator
-      [form ::boolean-binary-operator-sym [:ref ::restriction] [:ref ::restriction]]
+        ::boolean-binary-operator
+        [form ::boolean-binary-operator-sym [:ref ::restriction] [:ref ::restriction]]
 
-      ::in-operator
-      [form in ::operand [:or [:vector :any] [:ref ::relation]]]
+        ::in-operator
+        [form in ::operand [:or [:vector :any] [:ref ::canonical]]]
 
-      ::restriction
-      [:or
-       [:ref ::binary-operator]
-       [:ref ::boolean-binary-operator]
-       [:ref ::in-operator]]
+        ::restriction
+        [:or
+         [:ref ::binary-operator]
+         [:ref ::boolean-binary-operator]
+         [:ref ::in-operator]]
 
-      ::expr
-      [:and
-       [:vector :any]
-       [:cat ::ident [:* [:or ::operand [:ref ::expr]]]]]
+        ::expr
+        [:and
+         [:vector :any]
+         [:cat ::ident [:* [:or ::operand [:ref ::expr]]]]]
 
-      ::relation
-      [form relation :keyword]
+        ::relation
+        [form relation :keyword]
 
-      ::join
-      [form join [:ref ::relation] [:ref ::relation] [:ref ::restriction]]
+        ::join
+        [form join [:ref ::canonical] [:ref ::canonical] [:ref ::restriction]]
 
-      ::full-join
-      [form full-join [:ref ::relation] [:ref ::relation] [:ref ::restriction]]
+        ::full-join
+        [form full-join [:ref ::canonical] [:ref ::canonical] [:ref ::restriction]]
 
-      ::project
-      [form project [:ref ::relation] [:vector :keyword]]
+        ::left-join
+        [form left-join [:ref ::canonical] [:ref ::canonical] [:ref ::restriction]]
 
-      ::project-away
-      [form project-away [:ref ::relation] [:vector :keyword]]
+        ::right-join
+        [form right-join [:ref ::canonical] [:ref ::canonical] [:ref ::restriction]]
 
-      ::rename
-      [form rename [:ref ::relation] [:vector [:tuple :keyword :keyword]]]
+        ::project
+        [form project [:ref ::canonical] [:vector :keyword]]
 
-      ::restrict
-      [form restrict [:ref ::relation] ::restriction]
+        ::project-away
+        [form project-away [:ref ::canonical] [:vector :keyword]]
 
-      ::extend
-      [form extend [:ref ::relation] [:vector [:tuple :keyword ::expr]]]
+        ::rename
+        [form rename [:ref ::canonical] [:vector [:tuple :keyword :keyword]]]
 
-      ::union
-      [form union [:ref ::relation] [:ref ::relation]]
+        ::restrict
+        [form restrict [:ref ::canonical] ::restriction]
 
-      ::limit
-      [form limit [:ref ::relation] :int]
+        ::extend
+        [form extend [:ref ::canonical] [:vector [:tuple :keyword ::expr]]]
 
-      ::offset
-      [form offset [:ref ::relation] :int]
+        ::union
+        [form union [:ref ::canonical] [:ref ::canonical]]
 
-      ::order-by
-      [form order-by [:ref ::relation] [:vector :keyword]]
+        ::distinct
+        [form distinct [:ref ::canonical]]
 
-      ;; start rules
-      ::canonical
-      [:or
-       [:ref ::relation]
-       [:ref ::restrict]
-       [:ref ::project]
-       [:ref ::project-away]
-       [:ref ::rename]
-       [:ref ::join]
-       [:ref ::full-join]
-       [:ref ::union]
-       [:ref ::extend]
-       [:ref ::limit]
-       [:ref ::offset]
-       [:ref ::order-by]]}
+        ::limit
+        [:or
+         [form limit [:ref ::canonical] ::pagination-value]
+         [form limit [:ref ::canonical] ::pagination-value ::pagination-value]]
+
+        ::offset
+        [form offset [:ref ::canonical] ::pagination-value]
+
+        ::order-by
+        [form order-by [:ref ::canonical]
+         [:vector [:or :keyword [:tuple :keyword [:enum :asc :desc]]]]]
+
+        ;; start rules
+        ::canonical
+        [:or
+         [:ref ::relation]
+         [:ref ::restrict]
+         [:ref ::project]
+         [:ref ::project-away]
+         [:ref ::rename]
+         [:ref ::distinct]
+         [:ref ::join]
+         [:ref ::full-join]
+         [:ref ::left-join]
+         [:ref ::right-join]
+         [:ref ::union]
+         [:ref ::extend]
+         [:ref ::limit]
+         [:ref ::offset]
+         [:ref ::order-by]]}
+      ::pagination-value
+      [:fn {:error/message "should be a nonnegative integer or named parameter"}
+       pagination/value?])
 
     ;; apply all [form ...] elements
     (postwalk (apply-if form? #(apply form (rest %))))))
@@ -137,4 +157,3 @@
   "Returns humanized error descriptions as data or nil if the form is valid."
   [schema form]
   (me/humanize (explain-data schema form)))
-
