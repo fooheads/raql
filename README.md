@@ -20,6 +20,7 @@ The following operators are available:
 * `union` – combine two relations with identical headings
 * `order-by` – order tuples by attributes
 * `limit` – limit the number of tuples, optionally with an offset
+* `offset` – skip the specified number of tuples
 
 A query can be compiled with `fooheads.raql.core/compile` which returns an AST
 enriched with heading information.  The AST can be transformed back with
@@ -71,6 +72,45 @@ queries in a more natural flow.
 `fooheads.raql.rewrite/apply-views` replaces `[relation <name>]` expressions with
 predefined query expressions.  This enables view like abstractions when building
 larger queries.
+
+## Pagination
+
+Limit and offset are separate, heading-preserving operators:
+
+```clojure
+'[-> [relation :artist]
+     [order-by [:artist/artist-id]]
+     [offset 20]
+     [limit 10]]
+```
+
+This skips 20 rows, then returns at most 10. The existing `[limit 10 20]`
+threading step is an equivalent shorthand. Either operator can be used alone.
+Ordering by a unique attribute, or a combination of attributes that is unique,
+is needed for predictable pages.
+
+Operator order matters: `[limit 10]` followed by `[offset 3]` leaves at most
+seven rows from the original first ten, not ten rows starting at the fourth.
+Pagination can also appear inside subqueries and other relational expressions.
+An `order-by` after pagination sorts the selected subset instead of changing
+which rows were originally selected.
+
+Counts must be nonnegative integers or named parameter symbols such as
+`?page-size` and `?start`. Zero limit produces an empty relation; zero offset
+skips nothing. Invalid counts and operator arities are rejected during
+compilation. Named counts are validated when their values are bound by the
+translator.
+
+```clojure
+'[-> [relation :artist]
+     [order-by [:artist/artist-id]]
+     [offset ?start]
+     [limit ?page-size]]
+```
+
+RAQL syntax and ASTs do not select a database. For SQL, see
+[`raql-honeysql`](https://github.com/fooheads/raql-honeysql) for database
+configuration, named parameter binding, and database-specific ordering rules.
 
 ## Development
 
