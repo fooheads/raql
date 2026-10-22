@@ -1,6 +1,7 @@
 (ns fooheads.raql.ast
   (:require
     [clojure.walk :refer [postwalk]]
+    [fooheads.raql.aggregate :as aggregate]
     [fooheads.raql.pagination :as pagination]
     [fooheads.stdlib :refer [const apply-if]]
     [fooheads.tolk :as tolk]))
@@ -19,6 +20,7 @@
     'right-join
     'union
     'divide
+    'aggregate
     'limit
     'offset
     'order-by
@@ -32,6 +34,11 @@
 (defn- resolve-var [v]
   (if (operator? v)
     (fn [& args]
+      (when (= 'aggregate v)
+        (aggregate/validate-args! args)
+        (when-not (operator? (:operator (first args)))
+          (throw (ex-info "aggregate requires a relational query"
+                          {:operator v :relation (first args)}))))
       (when (= 'divide v)
         (when-not (= 2 (count args))
           (throw (ex-info "divide requires exactly two operands"
@@ -55,7 +62,7 @@
 
 
 (defn node? [x]
-  (and (map? x) (contains? x :operator) (contains? x :args)))
+  (and (map? x) (symbol? (:operator x)) (vector? (:args x))))
 
 
 (defn ast->raql [ast]

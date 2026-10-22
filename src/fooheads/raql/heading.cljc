@@ -3,6 +3,7 @@
   (:require
     [clj-fuzzy.metrics :as fuzzy]
     [clojure.walk :as walk]
+    [fooheads.raql.aggregate :as aggregate]
     [fooheads.raql.ast :as ast]
     [fooheads.setish :as set]
     [fooheads.stdlib :as stdlib :refer [apply-if throw-ex]]))
@@ -206,6 +207,10 @@
 
       divide
       (apply divide (map infer-heading args))
+
+      aggregate
+      (let [[expr aggregates] args]
+        (aggregate/infer-heading (infer-heading expr) aggregates))
 
       limit
       (let [[expr n offset] args

@@ -19,6 +19,7 @@ The following operators are available:
 * `join`, `full-join`, `left-join`, `right-join` – relational joins
 * `union` – combine two relations with identical headings
 * `divide` – return the tuples associated with every tuple of another relation
+* `aggregate` – fold a relation into one tuple of named counts, sums, or averages
 * `order-by` – order tuples by attributes
 * `limit` – limit the number of tuples, optionally with an offset
 * `offset` – skip the specified number of tuples
@@ -125,6 +126,87 @@ Parameters can be used inside operand expressions using the translator's
 existing binding support. An `in` collection parameter is not automatically a
 relation; there is no relation-valued parameter API. Supply S as an existing
 base or derived relation instead.
+
+## Relational aggregation
+
+`aggregate` is an ungrouped, declarative fold over a base or derived relation.
+Its second operand maps output attribute keywords to inspectable aggregate
+expressions:
+
+```clojure
+'[aggregate [relation :person]
+  {:summary/count [count]
+   :summary/total-age [sum :person/age]
+   :summary/average-age [avg :person/age]}]
+
+'[-> [relation :person]
+     [restrict [>= :person/age 18]]
+     [aggregate {:summary/count [count]
+                 :summary/average-age [avg :person/age]}]]
+```
+
+Use existing canonical relation expressions, not a bare `:person` operand.
+Predicates restrict the input; they are not aggregate arguments. The result
+is a relation containing **exactly one tuple**, with only the named aggregate
+attributes, unless an aggregate raises an error.
+
+| Expression | Logical result type | Empty input | Invalid selected value |
+| --- | --- | --- | --- |
+| `[count]` | `:integer` | 0 | Counts tuples, regardless of field values |
+| `[sum attribute]` | Input's `:integer` or `:double` | Numeric zero | Error |
+| `[avg attribute]` | `:double` | **Error** | Error |
+
+Selectors must name an existing attribute with logical type `:integer` or
+`:double`. Missing/nil and nonnumeric selected values are errors, not values
+to skip. Nonfinite floating values/results are outside the supported numeric
+domain. Count does not mean SQL's NULL-skipping `COUNT(column)`. Exact decimal
+types and optional-result types are not provided in this first implementation.
+Integer counts and sums are exact within the backend's representable range;
+overflow must fail rather than wrap or silently become floating point.
+Averages and double sums are approximate, with backend floating-point rounding
+and range limits. Integer averages can be fractional, but converting large
+integers to double can lose precision.
+
+**Set semantics apply to complete source tuples before the fold.** People
+`(id=1, age=20)`, `(id=2, age=20)`, `(id=3, age=50)` have count 3 and average
+age 30, not 35. Duplicate copies of the same person tuple contribute once;
+different tuples with the same age both contribute. Project first to count
+distinct values:
+
+```clojure
+'[-> [relation :person]
+     [project [:person/age]]
+     [aggregate {:summary/distinct-ages [count]}]]
+```
+
+Aggregation composes with restrictions, projection, views, ordering, pagination,
+and other aggregates. Operator order remains meaningful: aggregating a page
+summarizes that page; paginating an aggregate pages its one-tuple result.
+For a total count and a page, derive two expressions from the same distinct,
+unpaged matching relation:
+
+```clojure
+(let [matching '[-> [relation :person]
+                    [restrict [>= :person/age ?minimum]]
+                    [project [:person/id]]
+                    [distinct]]]
+  {:total ['aggregate matching '{:summary/count [count]}]
+   :page ['-> matching ['order-by [:person/id]] ['offset 20] ['limit 10]]})
+```
+
+An empty aggregate map yields one empty tuple, even for empty input.
+Counting a zero-attribute input yields 0 or 1 according to whether that input
+relation is empty or contains the empty tuple.
+
+`fooheads.raql.aggregate/definitions` describes the standard aggregate arities,
+types, and empty/error contracts as backend-independent data. No Clojure
+closures, arbitrary database functions, or SQL types are part of these
+expressions. Backends implement these contracts or explicitly report an
+unsupported capability. There is no public aggregate registration API yet.
+Grouping is deferred; the intended future form is
+`[aggregate-by R [:person/team] {:summary/count [count]}]`, not currently
+supported syntax. Ordinary global aggregation does not require a grouping
+relation.
 
 ## Pagination
 

@@ -3,6 +3,7 @@
   validate and explain errors."
   (:require
     [clojure.walk :refer [postwalk]]
+    [fooheads.raql.aggregate :as aggregate]
     [fooheads.raql.pagination :as pagination]
     [fooheads.stdlib :refer [apply-if]]
     [malli.core :as m]
@@ -95,6 +96,9 @@
         ::divide
         [form divide [:ref ::canonical] [:ref ::canonical]]
 
+        ::aggregate
+        [form aggregate [:ref ::canonical] [:map-of :keyword ::aggregate-expression]]
+
         ::distinct
         [form distinct [:ref ::canonical]]
 
@@ -125,13 +129,17 @@
          [:ref ::right-join]
          [:ref ::union]
          [:ref ::divide]
+         [:ref ::aggregate]
          [:ref ::extend]
          [:ref ::limit]
          [:ref ::offset]
          [:ref ::order-by]]}
       ::pagination-value
       [:fn {:error/message "should be a nonnegative integer or named parameter"}
-       pagination/value?])
+       pagination/value?]
+      ::aggregate-expression
+      [:fn {:error/message "should be [count], [sum attribute], or [avg attribute]"}
+       aggregate/expression?])
 
     ;; apply all [form ...] elements
     (postwalk (apply-if form? #(apply form (rest %))))))
