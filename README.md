@@ -18,6 +18,7 @@ The following operators are available:
 * `distinct` – remove duplicate tuples
 * `join`, `full-join`, `left-join`, `right-join` – relational joins
 * `union` – combine two relations with identical headings
+* `divide` – return the tuples associated with every tuple of another relation
 * `order-by` – order tuples by attributes
 * `limit` – limit the number of tuples, optionally with an offset
 * `offset` – skip the specified number of tuples
@@ -72,6 +73,58 @@ queries in a more natural flow.
 `fooheads.raql.rewrite/apply-views` replaces `[relation <name>]` expressions with
 predefined query expressions.  This enables view like abstractions when building
 larger queries.
+
+## Relational division
+
+`[divide R S]` expresses "has every required value", where both operands are
+base or derived relation expressions. The divisor S's attribute names must be a
+subset of R's, with identical `:attr/type` values. The result heading is R's
+heading minus S's heading. Attribute identity is the complete keyword, not just
+its unqualified name; use `rename` to align separately named attributes.
+
+For example:
+
+```text
+ItemTags(item-id, tag): (1, A), (1, B), (2, A),
+                       (3, A), (3, B), (3, C)
+RequiredTags(tag):      (A), (B)
+```
+
+With headings `[:ItemTags/item-id :ItemTags/tag]` and `[:RequiredTags/tag]`,
+these canonical and threaded forms return distinct item IDs 1 and 3:
+
+```clojure
+'[divide
+  [relation :ItemTags]
+  [rename [relation :RequiredTags] [[:RequiredTags/tag :ItemTags/tag]]]]
+
+'[-> [relation :ItemTags]
+     [divide
+      [rename [relation :RequiredTags] [[:RequiredTags/tag :ItemTags/tag]]]]]
+```
+
+Extra tags in R are allowed; duplicates in either operand do not affect the
+answer. Multi-attribute divisors require every complete tuple, not independent
+matches for each attribute. Division composes with projection, restrictions,
+ordering, limit, offset, and other division expressions.
+
+**Empty-divisor caveat:** if S is empty, division returns the distinct
+projection of R onto the result attributes. An empty R always gives an empty
+result, including when S is empty. It never invents IDs absent from R. A search
+where "no selected tags" must include items without tags needs to handle that
+case outside this binary operator.
+
+RAQL keeps database behavior out of the compiler. `raql-honeysql` uses ordinary
+SQL equality for division matching: NULL does not match NULL in either result
+keys or divisor attributes. A required tuple containing NULL therefore cannot
+be satisfied; with an empty divisor, NULL candidate keys are still retained.
+The SQL adapter documents its unit-column representation for an empty result
+heading (when S covers all of R's attributes).
+
+Parameters can be used inside operand expressions using the translator's
+existing binding support. An `in` collection parameter is not automatically a
+relation; there is no relation-valued parameter API. Supply S as an existing
+base or derived relation instead.
 
 ## Pagination
 
