@@ -1,5 +1,5 @@
 (ns fooheads.raql.heading
-  (:refer-clojure :exclude [alias distinct extend])
+  (:refer-clojure :exclude [alias distinct divide extend])
   (:require
     [clj-fuzzy.metrics :as fuzzy]
     [clojure.walk :as walk]
@@ -115,6 +115,20 @@
   xh)
 
 
+(defn- divide [xh yh]
+  (let [dividend-types (into {} (map (juxt :attr/name :attr/type)) xh)
+        divisor-names (mapv :attr/name yh)]
+    (validate-attrs-exists! "divide by" xh divisor-names)
+    (doseq [{:attr/keys [name type]} yh]
+      (when-not (= (get dividend-types name) type)
+        (throw (ex-info "divide requires compatible attribute types"
+                        {:operator 'divide
+                         :attribute name
+                         :dividend-type (get dividend-types name)
+                         :divisor-type type}))))
+    (project-away xh divisor-names)))
+
+
 (defn- order-by [xh ordering]
   (let [attrs (map (fn [x] (if (vector? x) (first x) x)) ordering)]
     (validate-attrs-exists! "order-by" xh attrs)
@@ -189,6 +203,9 @@
             heading-y (mapv to-attr (infer-heading expr-y))]
         (assert (= (set heading-x) (set heading-y)) "union: headings must be the same")
         heading-x)
+
+      divide
+      (apply divide (map infer-heading args))
 
       limit
       (let [[expr n offset] args

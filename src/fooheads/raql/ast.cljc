@@ -18,6 +18,7 @@
     'left-join
     'right-join
     'union
+    'divide
     'limit
     'offset
     'order-by
@@ -31,6 +32,13 @@
 (defn- resolve-var [v]
   (if (operator? v)
     (fn [& args]
+      (when (= 'divide v)
+        (when-not (= 2 (count args))
+          (throw (ex-info "divide requires exactly two operands"
+                          {:operator v :args (vec args)})))
+        (when-not (every? #(operator? (:operator %)) args)
+          (throw (ex-info "divide requires two relational queries"
+                          {:operator v :args (vec args)}))))
       (when (#{'limit 'offset} v)
         (pagination/validate-args! v args)
         (when-not (operator? (:operator (first args)))

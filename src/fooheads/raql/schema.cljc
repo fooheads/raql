@@ -92,6 +92,9 @@
         ::union
         [form union [:ref ::canonical] [:ref ::canonical]]
 
+        ::divide
+        [form divide [:ref ::canonical] [:ref ::canonical]]
+
         ::distinct
         [form distinct [:ref ::canonical]]
 
@@ -121,6 +124,7 @@
          [:ref ::left-join]
          [:ref ::right-join]
          [:ref ::union]
+         [:ref ::divide]
          [:ref ::extend]
          [:ref ::limit]
          [:ref ::offset]
